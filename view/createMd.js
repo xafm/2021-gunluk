@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const workbook = new ExcelJS.Workbook()
 const excelPath = path.join(__dirname, '../', 'data.xlsx')
+const {isDateValid, formatDate, monthNames, daysOfWeek} = require('./helper')
 
 let activityDefinitions = []
 let dailyActivities = []
@@ -12,6 +13,16 @@ exports.createMd = async function () {
   activityDefinitions = []
   dailyActivities = []
 
+  try {
+    await parseExcel()
+    const md = prepareMd()
+    writeMDFile(md)
+  } catch (error) {
+    throw new Error(error.message)
+  }
+}
+
+async function parseExcel() {
   try {
     await workbook.xlsx.readFile(excelPath)
   } catch (error) {
@@ -122,6 +133,7 @@ exports.createMd = async function () {
           newDailyActivity.date = cell.value
           newDailyActivity.month = cell.value.getMonth()
           newDailyActivity.weekNumber = cell.value.getWeek()
+          newDailyActivity.year = cell.value.getFullYear()
           newDailyActivity.formattedDate = formatDate(cell.value)
           newDailyActivity.rowNumber = rowNumber
           break
@@ -151,6 +163,12 @@ exports.createMd = async function () {
   }
 
   dailyActivitiesTemp.forEach(row => {
+    if (!row.date) {
+      throw new Error(
+        `Tarih girin. (Günlük Aktiviteler satır: ${row.rowNumber}).`,
+      )
+    }
+
     if (!row.code) {
       throw new Error(
         `Aktivite kodunu girin. (Günlük Aktiviteler, satır: ${row.rowNumber}).`,
@@ -172,6 +190,7 @@ exports.createMd = async function () {
       date: row.date,
       month: row.month,
       weekNumber: row.weekNumber,
+      year: row.year,
       formattedDate: row.formattedDate,
       code: row.code,
       activityDefinition: activityDefinition.name,
@@ -180,7 +199,9 @@ exports.createMd = async function () {
       count: row.count,
     })
   })
+}
 
+function prepareMd() {
   const md = []
   md.push({h1: '2021'})
 
@@ -259,7 +280,7 @@ exports.createMd = async function () {
   writeWeeklyTotals()
   writeMonthlyTotals()
 
-  writeMDFile(md)
+  return md
 
   function writeDay() {
     monthMD.push({
@@ -305,38 +326,26 @@ exports.createMd = async function () {
     md.push('&nbsp;')
     monthMD = []
   }
-}
 
-function buildDayText(dailyActivity) {
-  let actCount = dailyActivity.count
-    ? ` / (${dailyActivity.count} ${dailyActivity.unit})`
-    : ''
-  if (!dailyActivity.text) {
-    actCount = actCount.replace(' / ', '')
-  }
+  function buildDayText(dailyActivity) {
+    let actCount = dailyActivity.count
+      ? ` / (${dailyActivity.count} ${dailyActivity.unit})`
+      : ''
+    if (!dailyActivity.text) {
+      actCount = actCount.replace(' / ', '')
+    }
 
-  let ret = `${dailyActivity.activityDefinition}: `
-  if (dailyActivity.text) {
-    ret += dailyActivity.text
-  }
+    let ret = `${dailyActivity.activityDefinition}: `
+    if (dailyActivity.text) {
+      ret += dailyActivity.text
+    }
 
-  if (actCount) {
-    ret += actCount
+    if (actCount) {
+      ret += actCount
+    }
   }
 
   return ret
-}
-
-function formatDate(date) {
-  if (!date) return
-  date = new Date(date)
-  let month = date.getMonth() + 1
-  month = month < 10 ? '0' + month : month
-  let day = date.getDate() < 10 ? '0' + date.getDate() : date.getDate()
-
-  let dayOfWeekText = daysOfWeek[date.getDay()]
-
-  return `${day}.${month}.${date.getFullYear()} ${dayOfWeekText}`
 }
 
 async function writeMDFile(arrMd) {
@@ -356,61 +365,4 @@ async function writeMDFile(arrMd) {
   } catch (error) {
     console.log(error.message)
   }
-}
-
-Date.prototype.getWeek = function (dowOffset) {
-  dowOffset = typeof dowOffset == 'int' ? dowOffset : 1 //default dowOffset to zero
-  var newYear = new Date(this.getFullYear(), 0, 1)
-  var day = newYear.getDay() - dowOffset //the day of week the year begins on
-  day = day >= 0 ? day : day + 7
-  var daynum =
-    Math.floor(
-      (this.getTime() -
-        newYear.getTime() -
-        (this.getTimezoneOffset() - newYear.getTimezoneOffset()) * 60000) /
-        86400000,
-    ) + 1
-  var weeknum
-  //if the year starts before the middle of a week
-  if (day < 4) {
-    weeknum = Math.floor((daynum + day - 1) / 7) + 1
-    if (weeknum > 52) {
-      nYear = new Date(this.getFullYear() + 1, 0, 1)
-      nday = nYear.getDay() - dowOffset
-      nday = nday >= 0 ? nday : nday + 7
-      /*if the next year starts before the middle of
-                the week, it is week #1 of that year*/
-      weeknum = nday < 4 ? 1 : 53
-    }
-  } else {
-    weeknum = Math.floor((daynum + day - 1) / 7)
-  }
-  return weeknum
-}
-
-var isDateValid = (...val) => !Number.isNaN(new Date(...val).valueOf())
-
-var monthNames = {
-  0: 'Ocak',
-  1: 'Şubat',
-  2: 'Mart',
-  3: 'Nisan',
-  4: 'Mayıs',
-  5: 'Haziran',
-  6: 'Temmuz',
-  7: 'Ağustos',
-  8: 'Eylül',
-  9: 'Ekim',
-  10: 'Kasım',
-  11: 'Aralık',
-}
-
-var daysOfWeek = {
-  0: 'Pazar',
-  1: 'Pazartesi',
-  2: 'Salı',
-  3: 'Çarşamba',
-  4: 'Perşembe',
-  5: 'Cuma',
-  6: 'Cumartesi',
 }
