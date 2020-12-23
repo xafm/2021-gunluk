@@ -5,54 +5,60 @@ const path = require('path')
 const {createMd} = require('./createMd')
 const {shell} = require('electron')
 
-const excelPath = path.join(__dirname, '/data.xlsx')
-const mdPath = path.join(__dirname, '/2021.md')
+const excelPath = path.join(__dirname, '../data.xlsx')
+const mdPath = path.join(__dirname, '../2021.md')
 
-const readFile = file => {
-  if (!fs.existsSync(file)) {
-    throw new Error('başaramadım. neyi başaramadın a..?')
-  }
-
-  fs.readFile(file, (err, data) => {
-    if (!err) {
-      document.querySelector('.md').innerHTML = marked(data.toString())
+const readFile = (file, showSuccessMessage) => {
+  fs.access(file, fs.F_OK, err => {
+    if (err) {
+      showMessage({
+        message: `Teknik hata: Oluşturulan markdown dosyası ${mdPath} dizininde bulunamadı`,
+        type: 'e',
+      })
+      return
     }
+    fs.readFile(file, (err, data) => {
+      if (err) {
+        showMessage({
+          message: `Teknik hata: Markdown dosyası ${mdPath} dizininden okunamadı`,
+          type: 'e',
+        })
+        return
+      }
+      document.querySelector('.md').innerHTML = marked(data.toString())
+      if (showSuccessMessage) {
+        showMessage({
+          message: 'Yenilendi!',
+          type: 's',
+        })
+      }
+    })
   })
 }
 
-const refreshDocument = async () => {
+const refreshDocument = async (showSuccessMessage) => {
   try {
     await createMd()
-    let mdPath = path.join(__dirname, '/../../../2021.md')
-    readFile(mdPath)
+    readFile(mdPath, showSuccessMessage)
   } catch (error) {
-    console.log(error.message)
-    try {
-      let mdPath = path.join(__dirname, '/../2021.md')
-      readFile(mdPath)
-    } catch (error) {
-      console.log(error.message)
-    }
+    showMessage({
+      message: error.message,
+      type: 'e',
+    })
   }
 }
 
 const openDataExcel = async () => {
-  try {
-    let excelPath = path.join(__dirname, '../data.xlsx')
-    if (fs.existsSync(excelPath)) {
-      shell.openPath(excelPath)
-    } else {
-      throw new Error()
+  fs.access(excelPath, fs.F_OK, err => {
+    if (err) {
+      showMessage({
+        message: `Excel dosyası ${excelPath} dizininde bulunamadı`,
+        type: 'e',
+      })
+      return
     }
-  } catch (error) {
-    console.log(error.message)
-    let excelPath = path.join(__dirname, '/data.xlsx')
-    if (fs.existsSync(excelPath)) {
-      shell.openPath(excelPath)
-    } else {
-      throw new Error()
-    }
-  }
+    shell.openPath(excelPath)
+  })
 }
 
 const close = e => {
@@ -60,22 +66,45 @@ const close = e => {
   window.close()
 }
 
-const showMessage = (message, type) => {
-  message = 'Excel dosyasında hata! '
-  const messageClass = message === 's' ? 'successMessage' : 'errorMessage'
+const timeoutList = []
+const showMessage = ({message, type}) => {
+  if (!message || !type) {
+    return
+  }
+
+  let messageClass = ''
+  switch (type) {
+    case 's':
+      messageClass = 'successMessage'
+      break
+    case 'e':
+      messageClass = 'errorMessage'
+      break
+    default:
+      break
+  }
+
+  if (timeoutList.length) {
+    while (timeoutList.length) {
+      clearTimeout(timeoutList.pop())
+    }
+  }
+
   document.querySelector('.message').innerHTML = `
-   <div class="${messageClass}">
+   <div  id="msg" class="${messageClass}">
     <h3> ${message}</h3>
     </div>
   `
-  // setTimeout(() => {
-  //   document.querySelector('.message').innerHTML = ''
-  // }, 1000);
+
+  const timeout = setTimeout(() => {
+    document.querySelector('.message').innerHTML = ''
+  }, 5000)
+  timeoutList.push(timeout)
 }
 
 document.querySelector('.close').addEventListener('click', close)
-document.querySelector('.refresh').addEventListener('click', showMessage)
+document.querySelector('.refresh').addEventListener('click', () => refreshDocument(true))
 document.querySelector('.open-excel').addEventListener('click', openDataExcel)
 ;(function init() {
-  refreshDocument()
+  refreshDocument(false)
 })()

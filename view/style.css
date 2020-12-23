@@ -1,4 +1,3 @@
-/* @import url('https://fonts.googleapis.com/css?family=Lato|Playfair+Display'); */
 :root {
   --bg-light: #fffef4;
   --success: #43a047;
@@ -9,29 +8,6 @@
 ::-webkit-scrollbar {
   display: none;
 }
-
-/* input,
-button {
-  text-decoration: none;
-  color: pink;
-  background-color: transparent;
-  font-size: 30px;
-  border: none;
-  font-family: 'Lato', sans-serif;
-  outline:none;
-}
-
-.refresh,
-.open-excel {
-  color: #43a047;
-  font-size: 1rem;
-  border: #43a047 solid 0.1rem;
-  border-radius: 5px;
-  padding: 0 0.6rem;
-  text-align: center;
-} */
-
-
 
 input,
 button {
@@ -53,12 +29,12 @@ button {
 }
 
 .refresh:hover,
-.open-excel:hover{
+.open-excel:hover {
   color: var(--bg-light);
   background-color: var(--success);
 }
 
-.open-excel{
+.open-excel {
   margin-left: 1vw;
 }
 
@@ -70,58 +46,46 @@ button {
   border-radius: 10px;
 }
 
-.close:hover{
+.close:hover {
   color: var(--bg-light);
   background-color: var(--error);
 }
 
-.message{
+.message {
   display: flex;
   margin-top: 2rem;
   background-color: white;
-  
 }
 
-
-
-.errorMessage{
+.errorMessage {
   border: var(--error) solid 0.1rem;
-  border-radius: 4px;
   color: var(--error);
-  /* padding: 0.4rem; */
-  max-width: 30%;
-  padding: 1rem 0.1rem;
-  text-align: center;
-  min-width: 30%;
-  max-width: 45%;
 }
 
-.errorMessage h3{
-  padding: 0;
-  margin: 0;
-}
-
-.successMessage{
+.successMessage {
   border: var(--success) solid 0.1rem;
-  border-radius: 4px;
   color: var(--success);
-  padding: 1rem 0.1rem;
-  text-align: center;
-  min-width: 30%;
-  max-width: 45%;
 }
 
-.successMessage h3{
+.errorMessage h3,
+.successMessage h3 {
   padding: 0;
   margin: 0;
 }
 
-.errorMessage, .successMessage {
-  animation: animate1 2s forwards 4s ease-out 1;
+.errorMessage,
+.successMessage {
+  animation: animate1 2s forwards 3s ease-out 1;
+  word-wrap: break-word;
+  text-align: center;
+  padding: 1rem 0.2rem;
+  min-width: 30%;
+  max-width: 45%;
+  border-radius: 4px;
 }
 
-@keyframes animate1{
-  to{
+@keyframes animate1 {
+  to {
     opacity: 0;
   }
 }
@@ -383,8 +347,6 @@ body a:not([href]) {
   color: inherit;
   text-decoration: none;
 }
-
-
 
 body p,
 body blockquote,
