@@ -52,6 +52,12 @@ exports.createMd = async function () {
     activityDefinitionsTemp.push(newActivityDefinition)
   })
 
+  if (!activityDefinitionsTemp.length) {
+    throw new Error(
+      `Excel dosyasında "Aktivite Tanımları" sayfasını doldurmalısınız`,
+    )
+  }
+
   activityDefinitionsTemp.forEach(row => {
     if (!row.code) {
       throw new Error(
@@ -89,10 +95,17 @@ exports.createMd = async function () {
       unit: row.unit,
     })
   })
-  activityDefinitionsTemp = null;
+  activityDefinitionsTemp = null
 
-
+  // Günlük Aktiviteler
   ws = workbook.worksheets[1]
+  if (!ws) {
+    throw new Error(
+      `Excel dosyasındaki 2. sayfa okunamadı (Günlük Aktiviteler)`,
+    )
+  }
+
+  let dailyActivitiesTemp = []
   ws.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return
 
@@ -100,25 +113,72 @@ exports.createMd = async function () {
     row.eachCell((cell, colNumber) => {
       switch (colNumber) {
         case 1:
+          if (!isDateValid(cell.value)) {
+            throw new Error(
+              `Hatalı tarih formatı (Günlük Aktiviteler satır: ${rowNumber}).`,
+            )
+          }
+          cell.value = new Date(String(cell.value))
           newDailyActivity.date = cell.value
           newDailyActivity.month = cell.value.getMonth()
           newDailyActivity.weekNumber = cell.value.getWeek()
           newDailyActivity.formattedDate = formatDate(cell.value)
+          newDailyActivity.rowNumber = rowNumber
           break
         case 2:
           newDailyActivity.code = cell.value
+          newDailyActivity.rowNumber = rowNumber
           break
         case 3:
           newDailyActivity.text = cell.value
+          newDailyActivity.rowNumber = rowNumber
           break
         case 4:
           newDailyActivity.count = cell.value
+          newDailyActivity.rowNumber = rowNumber
           break
         default:
           break
       }
     })
-    dailyActivities.push(newDailyActivity)
+    dailyActivitiesTemp.push(newDailyActivity)
+  })
+
+  if (!dailyActivitiesTemp.length) {
+    throw new Error(
+      `Excel dosyasında "Günlük Aktiviteler" sayfasını doldurmalısınız`,
+    )
+  }
+
+  dailyActivitiesTemp.forEach(row => {
+    if (!row.code) {
+      throw new Error(
+        `Aktivite kodunu girin. (Günlük Aktiviteler, satır: ${row.rowNumber}).`,
+      )
+    }
+
+    let activityDefinition = activityDefinitions.find(
+      actDef => actDef.code === row.code,
+    )
+
+    if (!activityDefinition) {
+      throw new Error(
+        `Aktivite kodu "${row.code}" tanımlanmamış. Aktivite Tanımları sayfasında tanımlayın (Günlük Aktiviteler, satır: ${row.rowNumber}).`,
+      )
+    }
+
+    dailyActivities.push({
+      rowNumber: row.rowNumber,
+      date: row.date,
+      month: row.month,
+      weekNumber: row.weekNumber,
+      formattedDate: row.formattedDate,
+      code: row.code,
+      activityDefinition: activityDefinition.name,
+      unit: activityDefinition.unit,
+      text: row.text,
+      count: row.count,
+    })
   })
 
   const md = []
@@ -132,53 +192,44 @@ exports.createMd = async function () {
   let dailyActivitiesTexts = []
   let weeklyTotal = {}
   let monthlyTotal = {}
+  let yearlyTotal = {}
+
+  previousRecordDay = dailyActivities[0].date
+  previousRecordWeekNumber = dailyActivities[0].weekNumber
+  previousRecordMonthNumber = dailyActivities[0].month
+  monthMD.push({h1: monthNames[previousRecordMonthNumber]})
+
   dailyActivities.forEach(dailyActivity => {
-    // gün geçtiyse arrayi yazdır arrayi temizle
-    // hafta geçtiyse arrayi yazdır arrayi temizle
-    // ay geçtiyse geçtiyse arrayi yazdır arrayi temizle, yeni ayın başlığını at
-
-    if (previousRecordDay === undefined) {
-      previousRecordDay = dailyActivity.date
-    }
-
-    if (previousRecordWeekNumber === undefined) {
-      previousRecordWeekNumber = dailyActivity.weekNumber
-    }
-
-    // ilk kayda özel ay başlığı atılsın
-    if (previousRecordMonthNumber === undefined) {
-      monthMD.push({h1: monthNames[dailyActivity.month]})
-      previousRecordMonthNumber = dailyActivity.month
-    }
+    // Gün değiştiyse, günün verilerini tutan (önceki günü tutuyor olacak) array'i yazdır ardından array'i temizle
+    // Hafta değiştiyse, hafta toplam verilerini tutan array'i yazdır. Ardından array'i temizle
+    // Ay değiştiyse, ay toplamını tutan array'i yazdır array'i yazdır ve array'i temizle. Ardından yeni ayın başlığını at
 
     if (
       previousRecordDay.toLocaleString() !== dailyActivity.date.toLocaleString()
     ) {
-      // önceki gün tamamlandı yazdır array sıfırla
-      monthMD.push({
-        blockquote: [
-          formatDate(previousRecordDay),
-          {ul: [...dailyActivitiesTexts]},
-        ],
-      })
-      dailyActivitiesTexts = []
+      writeDay()
     }
 
     if (previousRecordWeekNumber !== dailyActivity.weekNumber) {
       // önceki hafta tamamlandı yazdır obje sıfırla
-      writeWeekTotals()
+      writeWeeklyTotals()
     }
 
     if (previousRecordMonthNumber !== dailyActivity.month) {
       // önceki ay tamamlandı toplamı yazdır obje sıfırla
       writeMonthlyTotals()
-      md.push({blockquote: [...monthMD, '&nbsp;']})
-      md.push('&nbsp;')
-      monthMD = []
 
-      // yeni ayın başlığını at
+      // yeni ay ocak değilse yeni ayın başlığını at
+      // if (!yeniyıl) {
       monthMD.push({h1: monthNames[dailyActivity.month]})
+      // }
     }
+
+    // if (yeniyıl) {
+    //   // eski yıl toplamı
+    //   // yeni  yıl başlığı
+    //   monthMD.push({h1: monthNames[dailyActivity.month]})
+    // }
 
     // Aktivite textleri doldurulur
     // Daha sonra aylık mdnin içerisine atılacak
@@ -203,21 +254,24 @@ exports.createMd = async function () {
     previousRecordMonthNumber = dailyActivity.month
   })
 
-  monthMD.push({
-    blockquote: [
-      formatDate(previousRecordDay),
-      {ul: [...dailyActivitiesTexts]},
-    ],
-  })
-
   // gün hafta ay yıl yaz
-  writeWeekTotals()
+  writeDay()
+  writeWeeklyTotals()
   writeMonthlyTotals()
-  md.push({blockquote: [...monthMD, '&nbsp;']})
 
   writeMDFile(md)
 
-  function writeWeekTotals() {
+  function writeDay() {
+    monthMD.push({
+      blockquote: [
+        formatDate(previousRecordDay),
+        {ul: [...dailyActivitiesTexts]},
+      ],
+    })
+    dailyActivitiesTexts = []
+  }
+
+  function writeWeeklyTotals() {
     monthMD.push({h2: `&nbsp; ${previousRecordWeekNumber + 1}. hafta toplamı`})
     let totalsTexts = []
     for (const act in weeklyTotal) {
@@ -247,22 +301,21 @@ exports.createMd = async function () {
     }
     monthMD.push({ul: [...totalsTexts]})
     monthlyTotal = {}
+    md.push({blockquote: [...monthMD, '&nbsp;']})
+    md.push('&nbsp;')
+    monthMD = []
   }
 }
 
 function buildDayText(dailyActivity) {
-  let activityDefinition = activityDefinitions.find(
-    actDef => actDef.code === dailyActivity.code,
-  )
-
   let actCount = dailyActivity.count
-    ? ` / (${dailyActivity.count} ${activityDefinition.unit})`
+    ? ` / (${dailyActivity.count} ${dailyActivity.unit})`
     : ''
   if (!dailyActivity.text) {
     actCount = actCount.replace(' / ', '')
   }
 
-  let ret = `${activityDefinition.name}: `
+  let ret = `${dailyActivity.activityDefinition}: `
   if (dailyActivity.text) {
     ret += dailyActivity.text
   }
@@ -298,13 +351,8 @@ async function writeMDFile(arrMd) {
     const mdPath = path.join(__dirname, '../', '2021.md')
     await fs.writeFileSync(mdPath, replacedMd, e => console.log(e))
 
-    // clear
     activityDefinitions = []
     dailyActivities = []
-
-    // converter = new showdown.Converter();
-    // const html = converter.makeHtml(replacedMd)
-    // await fs.writeFile('../2021.html', html, (e) => console.log(e))
   } catch (error) {
     console.log(error.message)
   }
@@ -339,6 +387,8 @@ Date.prototype.getWeek = function (dowOffset) {
   }
   return weeknum
 }
+
+var isDateValid = (...val) => !Number.isNaN(new Date(...val).valueOf())
 
 var monthNames = {
   0: 'Ocak',
