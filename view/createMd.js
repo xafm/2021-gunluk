@@ -16,7 +16,7 @@ exports.createMd = async function () {
   try {
     await parseExcel()
     const md = prepareMd()
-    writeMDFile(md)
+    await writeMDFile(md)
   } catch (error) {
     throw new Error(error.message)
   }
@@ -75,18 +75,6 @@ async function parseExcel() {
         `Aktivite kodunu girin. Aktivite tanımları satır: ${row.rowNumber}`,
       )
     }
-
-    // if (!row.name) {
-    //   throw new Error(
-    //     `Aktivite tanımını girin. Aktivite tanımları satır: ${row.rowNumber}`,
-    //   )
-    // }
-
-    // if (!row.unit) {
-    //   throw new Error(
-    //     `Aktivite birimini girin. Aktivite tanımları satır: ${row.rowNumber}`,
-    //   )
-    // }
 
     if (activityDefinitions.find(item => item.code === row.code)) {
       throw new Error(
@@ -203,11 +191,11 @@ async function parseExcel() {
 
 function prepareMd() {
   const md = []
-  md.push({h1: '2021'})
 
   let previousRecordDay
   let previousRecordWeekNumber
   let previousRecordMonthNumber
+  let previousRecordYear
 
   let monthMD = []
   let dailyActivitiesTexts = []
@@ -218,13 +206,16 @@ function prepareMd() {
   previousRecordDay = dailyActivities[0].date
   previousRecordWeekNumber = dailyActivities[0].weekNumber
   previousRecordMonthNumber = dailyActivities[0].month
+  previousRecordYear = dailyActivities[0].year
+
+  md.push({h1: previousRecordYear})
   monthMD.push({h1: monthNames[previousRecordMonthNumber]})
 
   dailyActivities.forEach(dailyActivity => {
     // Gün değiştiyse, günün verilerini tutan (önceki günü tutuyor olacak) array'i yazdır ardından array'i temizle
     // Hafta değiştiyse, hafta toplam verilerini tutan array'i yazdır. Ardından array'i temizle
     // Ay değiştiyse, ay toplamını tutan array'i yazdır array'i yazdır ve array'i temizle. Ardından yeni ayın başlığını at
-
+    console.log(previousRecordYear)
     if (
       previousRecordDay.toLocaleString() !== dailyActivity.date.toLocaleString()
     ) {
@@ -232,25 +223,27 @@ function prepareMd() {
     }
 
     if (previousRecordWeekNumber !== dailyActivity.weekNumber) {
-      // önceki hafta tamamlandı yazdır obje sıfırla
+      // önceki hafta tamamlandı, toplamı yazdır. weeklyTotal objesini sıfırla
       writeWeeklyTotals()
     }
 
     if (previousRecordMonthNumber !== dailyActivity.month) {
-      // önceki ay tamamlandı toplamı yazdır obje sıfırla
+      // önceki ay tamamlandı, toplamı yazdır. monthlyTotal objesini sıfırla
       writeMonthlyTotals()
 
-      // yeni ay ocak değilse yeni ayın başlığını at
-      // if (!yeniyıl) {
-      monthMD.push({h1: monthNames[dailyActivity.month]})
-      // }
+      // yıl değişmediyse yeni ayı yazdır
+      if (previousRecordYear === dailyActivity.year) {
+        monthMD.push({h1: monthNames[dailyActivity.month]})
+      }
     }
 
-    // if (yeniyıl) {
-    //   // eski yıl toplamı
-    //   // yeni  yıl başlığı
-    //   monthMD.push({h1: monthNames[dailyActivity.month]})
-    // }
+    if (previousRecordYear !== dailyActivity.year) {
+      // eski yıl toplamı
+      // yeni  yıl başlığı
+      writeYearlyTotals()
+      md.push({h1: dailyActivity.year})
+      monthMD.push({h1: monthNames[dailyActivity.month]})
+    }
 
     // Aktivite textleri doldurulur
     // Daha sonra aylık mdnin içerisine atılacak
@@ -270,15 +263,23 @@ function prepareMd() {
       monthlyTotal[dailyActivity.code] = dailyActivity.count
     }
 
+    if (yearlyTotal[dailyActivity.code]) {
+      yearlyTotal[dailyActivity.code] += dailyActivity.count
+    } else {
+      yearlyTotal[dailyActivity.code] = dailyActivity.count
+    }
+
     previousRecordDay = dailyActivity.date
     previousRecordWeekNumber = dailyActivity.weekNumber
     previousRecordMonthNumber = dailyActivity.month
+    previousRecordYear = dailyActivity.year
   })
 
   // gün hafta ay yıl yaz
   writeDay()
   writeWeeklyTotals()
   writeMonthlyTotals()
+  writeYearlyTotals()
 
   return md
 
@@ -327,6 +328,31 @@ function prepareMd() {
     monthMD = []
   }
 
+  function writeYearlyTotals() {
+    // md.push({
+    //   h2: `&nbsp; ${previousRecordYear} yılı toplamı 🎉`,
+    // })
+    let totalsTexts = []
+    for (const act in yearlyTotal) {
+      let actDefinition = activityDefinitions.find(
+        actDef => actDef.code === act,
+      )
+      totalsTexts.push(
+        `${actDefinition.name}: ${yearlyTotal[act]} ${actDefinition.unit}`,
+      )
+    }
+    // md.push({ul: [...totalsTexts]})
+    yearlyTotal = {}
+    md.push({
+      blockquote: [
+        {h2: `&nbsp; ${previousRecordYear} yılı toplamı 🎉`},
+        {ul: [...totalsTexts]},
+        // '&nbsp;',
+      ],
+    })
+    md.push('&nbsp;')
+  }
+
   function buildDayText(dailyActivity) {
     let actCount = dailyActivity.count
       ? ` / (${dailyActivity.count} ${dailyActivity.unit})`
@@ -343,9 +369,8 @@ function prepareMd() {
     if (actCount) {
       ret += actCount
     }
+    return ret
   }
-
-  return ret
 }
 
 async function writeMDFile(arrMd) {
