@@ -2,13 +2,14 @@ const fs = require('fs')
 const marked = require('marked')
 const remote = require('electron').remote
 const path = require('path')
-const {createMd} = require('./createMd')
+const {createMd} = require('./scripts/createMd')
 const {shell} = require('electron')
 
 const excelPath = path.join(__dirname, '../data.xlsx')
 const mdPath = path.join(__dirname, '../2021.md')
-
-const readFile = (file, showSuccessMessage) => {
+console.log(__dirname)
+console.log(excelPath)
+const readFile = file => {
   fs.access(file, fs.F_OK, err => {
     if (err) {
       showMessage({
@@ -26,20 +27,18 @@ const readFile = (file, showSuccessMessage) => {
         return
       }
       document.querySelector('.md').innerHTML = marked(data.toString())
-      if (showSuccessMessage) {
-        showMessage({
-          message: 'Yenilendi!',
-          type: 's',
-        })
-      }
+      showMessage({
+        message: 'Yenilendi!',
+        type: 's',
+      })
     })
   })
 }
 
-const refreshDocument = async (showSuccessMessage) => {
+const refreshDocument = async () => {
   try {
     await createMd()
-    readFile(mdPath, showSuccessMessage)
+    readFile(mdPath)
   } catch (error) {
     showMessage({
       message: error.message,
@@ -51,6 +50,7 @@ const refreshDocument = async (showSuccessMessage) => {
 const openDataExcel = async () => {
   fs.access(excelPath, fs.F_OK, err => {
     if (err) {
+      console.log('bura?')
       showMessage({
         message: `Excel dosyası ${excelPath} dizininde bulunamadı`,
         type: 'e',
@@ -95,7 +95,6 @@ const showMessage = ({message, type}) => {
     <h3> ${message}</h3>
     </div>
   `
-
   const timeout = setTimeout(() => {
     document.querySelector('.message').innerHTML = ''
   }, 5000)
@@ -103,8 +102,32 @@ const showMessage = ({message, type}) => {
 }
 
 document.querySelector('.close').addEventListener('click', close)
-document.querySelector('.refresh').addEventListener('click', () => refreshDocument(true))
+document
+  .querySelector('.refresh')
+  .addEventListener('click', () => refreshDocument())
 document.querySelector('.open-excel').addEventListener('click', openDataExcel)
 ;(function init() {
-  refreshDocument(false)
+  fs.access(mdPath, fs.F_OK, async err => {
+    if (err) {
+      await createMd()
+      refreshDocument()
+      return
+    }
+    fs.readFile(mdPath, (err, data) => {
+      if (err) {
+        showMessage({
+          message: `Teknik hata: Markdown dosyası ${mdPath} dizininden okunamadı`,
+          type: 'e',
+        })
+        return
+      }
+      document.querySelector('.md').innerHTML = marked(data.toString())
+      if (showSuccessMessage) {
+        showMessage({
+          message: 'Yenilendi!',
+          type: 's',
+        })
+      }
+    })
+  })
 })()

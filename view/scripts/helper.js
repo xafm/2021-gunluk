@@ -67,9 +67,15 @@ const daysOfWeek = {
   6: 'Cumartesi',
 }
 
+const numberThousandSeperator = number => {
+  return number.toString().replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+};
+
 module.exports = {
   isDateValid,
   formatDate,
+  numberThousandSeperator,
   monthNames,
   daysOfWeek
 }
+

@@ -3,8 +3,14 @@ const json2md = require('json2md')
 const fs = require('fs')
 const path = require('path')
 const workbook = new ExcelJS.Workbook()
-const excelPath = path.join(__dirname, '../', 'data.xlsx')
-const {isDateValid, formatDate, monthNames, daysOfWeek} = require('./helper')
+const excelPath = path.join(__dirname, '../', '../data.xlsx')
+const {
+  isDateValid,
+  formatDate,
+  numberThousandSeperator,
+  monthNames,
+  daysOfWeek,
+} = require('./helper')
 
 let activityDefinitions = []
 let dailyActivities = []
@@ -56,6 +62,10 @@ async function parseExcel() {
           newActivityDefinition.unit = cell.value
           newActivityDefinition.rowNumber = rowNumber
           break
+        case 4:
+          newActivityDefinition.displayQuantityAndUnitOnlyOnTotals = cell.value
+          newActivityDefinition.rowNumber = rowNumber
+          break
         default:
           break
       }
@@ -82,16 +92,18 @@ async function parseExcel() {
       )
     }
 
-    if (activityDefinitions.find(item => item.name === row.name)) {
-      throw new Error(
-        `Aynı aktivite tanımı 2 defa kullanılamaz. Aktivite tanımları satır: ${row.rowNumber} (${row.name})`,
-      )
-    }
+    // if (activityDefinitions.find(item => item.name === row.name)) {
+    //   throw new Error(
+    //     `Aynı aktivite tanımı 2 defa kullanılamaz. Aktivite tanımları satır: ${row.rowNumber} (${row.name})`,
+    //   )
+    // }
 
     activityDefinitions.push({
       code: row.code,
       name: row.name,
       unit: row.unit,
+      displayQuantityAndUnitOnlyOnTotals:
+        row.displayQuantityAndUnitOnlyOnTotals,
     })
   })
   activityDefinitionsTemp = null
@@ -183,6 +195,8 @@ async function parseExcel() {
       code: row.code,
       activityDefinition: activityDefinition.name,
       unit: activityDefinition.unit,
+      displayQuantityAndUnitOnlyOnTotals:
+        activityDefinition.displayQuantityAndUnitOnlyOnTotals,
       text: row.text,
       count: row.count,
     })
@@ -215,7 +229,6 @@ function prepareMd() {
     // Gün değiştiyse, günün verilerini tutan (önceki günü tutuyor olacak) array'i yazdır ardından array'i temizle
     // Hafta değiştiyse, hafta toplam verilerini tutan array'i yazdır. Ardından array'i temizle
     // Ay değiştiyse, ay toplamını tutan array'i yazdır array'i yazdır ve array'i temizle. Ardından yeni ayın başlığını at
-    console.log(previousRecordYear)
     if (
       previousRecordDay.toLocaleString() !== dailyActivity.date.toLocaleString()
     ) {
@@ -251,22 +264,24 @@ function prepareMd() {
     let activityText = buildDayText(dailyActivity)
     dailyActivitiesTexts.push(activityText)
 
-    if (weeklyTotal[dailyActivity.code]) {
-      weeklyTotal[dailyActivity.code] += dailyActivity.count
-    } else {
-      weeklyTotal[dailyActivity.code] = dailyActivity.count
-    }
+    if (dailyActivity.unit && typeof dailyActivity.count === 'number') {
+      if (weeklyTotal[dailyActivity.code]) {
+        weeklyTotal[dailyActivity.code] += dailyActivity.count
+      } else {
+        weeklyTotal[dailyActivity.code] = dailyActivity.count
+      }
 
-    if (monthlyTotal[dailyActivity.code]) {
-      monthlyTotal[dailyActivity.code] += dailyActivity.count
-    } else {
-      monthlyTotal[dailyActivity.code] = dailyActivity.count
-    }
+      if (monthlyTotal[dailyActivity.code]) {
+        monthlyTotal[dailyActivity.code] += dailyActivity.count
+      } else {
+        monthlyTotal[dailyActivity.code] = dailyActivity.count
+      }
 
-    if (yearlyTotal[dailyActivity.code]) {
-      yearlyTotal[dailyActivity.code] += dailyActivity.count
-    } else {
-      yearlyTotal[dailyActivity.code] = dailyActivity.count
+      if (yearlyTotal[dailyActivity.code]) {
+        yearlyTotal[dailyActivity.code] += dailyActivity.count
+      } else {
+        yearlyTotal[dailyActivity.code] = dailyActivity.count
+      }
     }
 
     previousRecordDay = dailyActivity.date
@@ -275,7 +290,6 @@ function prepareMd() {
     previousRecordYear = dailyActivity.year
   })
 
-  // gün hafta ay yıl yaz
   writeDay()
   writeWeeklyTotals()
   writeMonthlyTotals()
@@ -301,10 +315,13 @@ function prepareMd() {
         actDef => actDef.code === act,
       )
       totalsTexts.push(
-        `${actDefinition.name}: ${weeklyTotal[act]} ${actDefinition.unit}`,
+        `${actDefinition.name}: ${numberThousandSeperator(weeklyTotal[act])} ${
+          actDefinition.unit
+        }`,
       )
     }
     monthMD.push({ul: [...totalsTexts]})
+    monthMD.push('&nbsp;')
     weeklyTotal = {}
   }
 
@@ -318,7 +335,9 @@ function prepareMd() {
         actDef => actDef.code === act,
       )
       totalsTexts.push(
-        `${actDefinition.name}: ${monthlyTotal[act]} ${actDefinition.unit}`,
+        `${actDefinition.name}: ${numberThousandSeperator(monthlyTotal[act])} ${
+          actDefinition.unit
+        }`,
       )
     }
     monthMD.push({ul: [...totalsTexts]})
@@ -329,65 +348,92 @@ function prepareMd() {
   }
 
   function writeYearlyTotals() {
-    // md.push({
-    //   h2: `&nbsp; ${previousRecordYear} yılı toplamı 🎉`,
-    // })
     let totalsTexts = []
     for (const act in yearlyTotal) {
       let actDefinition = activityDefinitions.find(
         actDef => actDef.code === act,
       )
       totalsTexts.push(
-        `${actDefinition.name}: ${yearlyTotal[act]} ${actDefinition.unit}`,
+        `${actDefinition.name}: ${numberThousandSeperator(yearlyTotal[act])} ${
+          actDefinition.unit
+        }`,
       )
     }
-    // md.push({ul: [...totalsTexts]})
     yearlyTotal = {}
     md.push({
       blockquote: [
-        {h2: `&nbsp; ${previousRecordYear} yılı toplamı 🎉`},
+        {h2: `&nbsp; ${previousRecordYear} yılı toplamı`},
         {ul: [...totalsTexts]},
-        // '&nbsp;',
       ],
     })
     md.push('&nbsp;')
   }
 
   function buildDayText(dailyActivity) {
-    let actCount = dailyActivity.count
-      ? ` / (${dailyActivity.count} ${dailyActivity.unit})`
-      : ''
-    if (!dailyActivity.text) {
-      actCount = actCount.replace(' / ', '')
+    let returnText = ' '
+
+    if (dailyActivity.activityDefinition) {
+      returnText = dailyActivity.activityDefinition
     }
 
-    let ret = `${dailyActivity.activityDefinition}: `
     if (dailyActivity.text) {
-      ret += dailyActivity.text
+      if (dailyActivity.activityDefinition) {
+        returnText += ': ' + dailyActivity.text
+      } else {
+        returnText = dailyActivity.text
+      }
     }
 
-    if (actCount) {
-      ret += actCount
+    if (
+      dailyActivity.unit &&
+      !dailyActivity.displayQuantityAndUnitOnlyOnTotals
+    ) {
+      // tanım varsa açıklama varsa
+      // tanım: açıklama / (3 gün)
+      // tanım varsa açıklama yoksa
+      // tanım: (3 gün)
+      // yanım yoksa açıklama varsa
+      // açıklama / (3 gün)
+      // tanım yoksa açıklama yoksa
+      // (3 gün)
+      if (dailyActivity.count === undefined) {
+        dailyActivity.count = 0
+      }
+
+      if (dailyActivity.activityDefinition && dailyActivity.text) {
+        returnText += ` / (${numberThousandSeperator(dailyActivity.count)} ${
+          dailyActivity.unit
+        })`
+      } else if (dailyActivity.activityDefinition && !dailyActivity.text) {
+        returnText += `: (${numberThousandSeperator(dailyActivity.count)} ${
+          dailyActivity.unit
+        })`
+      } else if (!dailyActivity.activityDefinition && dailyActivity.text) {
+        returnText += ` / (${numberThousandSeperator(dailyActivity.count)} ${
+          dailyActivity.unit
+        })`
+      } else if (!dailyActivity.activityDefinition && !dailyActivity.text) {
+        returnText += `(${numberThousandSeperator(dailyActivity.count)} ${
+          dailyActivity.unit
+        })`
+      }
     }
-    return ret
+    return returnText
   }
 }
 
 async function writeMDFile(arrMd) {
-  const md = json2md(arrMd)
-
-  const search = '>  -'
-  const replaceWith = '> *'
-
-  const replacedMd = md.split(search).join(replaceWith)
+  let md = json2md(arrMd)
+  md = md.split('>  -').join('> *')
 
   try {
-    const mdPath = path.join(__dirname, '../', '2021.md')
-    await fs.writeFileSync(mdPath, replacedMd, e => console.log(e))
-
-    activityDefinitions = []
-    dailyActivities = []
+    const mdPath = path.join(__dirname, '../../', '2021.md')
+    fs.writeFileSync(mdPath, md, e => {
+      if (e) {
+        throw new Error(e.message)
+      }
+    })
   } catch (error) {
-    console.log(error.message)
+    throw new Error(error.message)
   }
 }
